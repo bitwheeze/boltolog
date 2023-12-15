@@ -16,7 +16,7 @@ public class AppConfiguration {
     OpenaiProps openai;
     String account;
     String key;
-    String blacklist = "opennetru,one-armed,oldpages,golos.lotto,lllll1ll,sonya44";
+    String blacklist = "opennetru,one-armed,oldpages,golos.lotto,lllll1ll,sonya44,valkommen,seabattle,jang";
     long startBlock = 0;
 
     String voter;

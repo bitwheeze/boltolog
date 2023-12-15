@@ -18,9 +18,8 @@ public class ChatGptService {
 
     private final OpenAiService openAiService;
 
-    public Optional<String> generateComment(Content content, double temperature) {
+    public Optional<String> generateComment(Content content, double temperature, String body) {
         try {
-            var body = content.getBody();
             if(body.length() < 200) return Optional.empty();
             if(body.length() > 6500) body = body.substring(0, 6500);
             var request = ChatCompletionRequest.builder().messages(List.of(
@@ -29,7 +28,7 @@ public class ChatGptService {
                             new ChatMessage("user", body)))
                     .maxTokens(100)
                     //.model("gpt-3.5-turbo")
-                    .model("gpt-4")
+                    .model("gpt-4-1106-preview")
                     .temperature(0.2)
                     .build();
 

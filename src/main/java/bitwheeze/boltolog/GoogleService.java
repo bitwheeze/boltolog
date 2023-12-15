@@ -4,9 +4,14 @@ import bitwheeze.golos.goloslib.model.Content;
 import com.google.cloud.language.v2.Document;
 import com.google.cloud.language.v2.LanguageServiceClient;
 import com.google.cloud.language.v2.Sentiment;
+import com.vladsch.flexmark.html.HtmlRenderer;
+import com.vladsch.flexmark.parser.Parser;
+import com.vladsch.flexmark.util.ast.Node;
+import com.vladsch.flexmark.util.data.MutableDataSet;
 import lombok.RequiredArgsConstructor;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
+import org.jsoup.Jsoup;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.PostConstruct;
@@ -29,11 +34,11 @@ public class GoogleService {
     }
 
     @SneakyThrows
-    public Optional<Sentiment> getCommentSentiment(Content content) {
+    public Optional<Sentiment> getCommentSentiment(String text) {
         try {
             Document doc = Document
                     .newBuilder()
-                    .setContent(content.getBody())
+                    .setContent(text)
                     .setType(Document.Type.PLAIN_TEXT)
                     .build();
 
@@ -48,5 +53,16 @@ public class GoogleService {
             log.error("Error analyzing sentiment: {}", ex.getMessage());
         }
         return Optional.empty();
+    }
+
+    public String cleanupText(String body) {
+        MutableDataSet options = new MutableDataSet();
+        Parser parser = Parser.builder(options).build();
+        HtmlRenderer renderer = HtmlRenderer.builder(options).build();
+
+        // You can re-use parser and renderer instances
+        Node document = parser.parse(body);
+        String html = renderer.render(document);  // "<p>This is <em>Sparta</em></p>\n"
+        return Jsoup.parse(html).text();
     }
 }

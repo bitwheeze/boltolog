@@ -1,12 +1,11 @@
 package bitwheeze.boltolog;
 
 import bitwheeze.golos.goloslib.*;
+import bitwheeze.golos.goloslib.model.Asset;
 import bitwheeze.golos.goloslib.model.Block;
 import bitwheeze.golos.goloslib.model.Content;
-import bitwheeze.golos.goloslib.model.op.Comment;
-import bitwheeze.golos.goloslib.model.op.Donate;
-import bitwheeze.golos.goloslib.model.op.OperationPack;
-import bitwheeze.golos.goloslib.model.op.Vote;
+import bitwheeze.golos.goloslib.model.op.*;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
@@ -17,6 +16,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.DigestUtils;
 
 import javax.annotation.PostConstruct;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
@@ -38,6 +39,8 @@ public class GolosService {
     final GoogleService googleService;
     final ChatGptService chatGptService;
     final TransactionFactory factory;
+
+    final ObjectMapper mapper;
 
     @PostConstruct
     void init() {
@@ -118,15 +121,25 @@ public class GolosService {
 
         var content = getComment(post.getAuthor(), post.getPermlink());
         //var content = golosService.getComment("iren007", "s-etimi");
-        if(content.getBody().length() > 100) {
-            googleService.getCommentSentiment(content).ifPresent(sentiment -> {
+
+        var body = googleService.cleanupText(content.getBody());
+
+        if(body.length() > 100) {
+            googleService.getCommentSentiment(body).ifPresent(sentiment -> {
                 if(sentiment.getScore() > 0) {
-                    chatGptService.generateComment(content, sentiment.getScore()).ifPresent(message -> postComment(post, message));
+                    chatGptService.generateComment(content, sentiment.getScore(), body).ifPresent(message -> postComment(post, message));
                 }
             });
         } else {
             log.info("post is to short {} - {}", content.getBody().length(), post);
         }
+    }
+
+    @Data
+    @AllArgsConstructor
+    private static class BlogDonateTarget {
+        String author;
+        String permlink;
     }
 
     private void postComment(Comment post, String message) {
@@ -141,15 +154,30 @@ public class GolosService {
             comment.setJsonMetadata("{}");
             log.info("create comment {}", comment);
 
-            var vote = new Vote();
-            vote.setVoter(config.voter);
-            vote.setAuthor(post.getAuthor());
-            vote.setPermlink(post.getPermlink());
-            vote.setWeight(10000);
+            var vote1 = new Vote();
+            vote1.setVoter(config.voter);
+            vote1.setAuthor(post.getAuthor());
+            vote1.setPermlink(post.getPermlink());
+            vote1.setWeight(10000);
+
+            var vote2 = new Vote();
+            vote2.setVoter(config.account);
+            vote2.setAuthor(post.getAuthor());
+            vote2.setPermlink(post.getPermlink());
+            vote2.setWeight(10000);
+
+            var target = new BlogDonateTarget(post.getAuthor(), post.getPermlink());
+
+            var memo = new DonateMemo("golos-blog", 1, mapper.writeValueAsString(target), message);
+            var donate1 = new Donate(config.voter, config.account, new Asset(BigDecimal.valueOf(51).setScale(3, RoundingMode.DOWN), "GOLOS"), memo, new String[0]);
+            var donate2 = new Donate(config.account, post.getAuthor(), new Asset(BigDecimal.valueOf(50).setScale(3, RoundingMode.DOWN), "GOLOS"), memo, new String[0]);
 
             var tr = factory.getBuidler()
                     .add(comment)
-                    .add(vote)
+                    .add(vote1)
+                    .add(vote2)
+                    .add(donate1)
+                    .add(donate2)
                     .buildAndSign(new String[]{config.key, config.voterKey});
 
             netApi.broadcastTransaction(tr).block().orElseThrow();
